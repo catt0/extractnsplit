@@ -9,6 +9,7 @@ import os
 import download
 import timestamps
 import split
+import recognize
 
 from pprint import pprint
 
@@ -19,6 +20,8 @@ def check_args(args) -> bool:
     if not timestamps.check_arguments(args):
         return False
     if not split.check_arguments(args):
+        return False
+    if not recognize.check_arguments(args):
         return False
 
     if download.is_remote_file(args.media_file_path) and args.timestamps_file_path == 'stdin' and args.dest is None:
@@ -58,13 +61,14 @@ def parse_args(args: list[str]):
 
     parser.add_argument_group('File splitting options')
     parser.add_argument('--split-file-pattern', type=str, default=r'fragment_%n', help='File name pattern used for fragments after splitting. The fragments are generated in the destination folder. '
-        r'Following replacements are supported: %n - fragment number (from 0), %f - media filename without extension. '
-        r'The pattern must include at least one %n. The default is "fragment_%n". The extension is appended automatically.')
+        r'Following replacements are supported: %%n - fragment number (from 0), %%f - media filename without extension. '
+        r'The pattern must include at least one %%n. The default is "fragment_%%n". The extension is appended automatically.')
     parser.add_argument('--split-num-threads', type=int, default=0, help='How many splits to perform in parralel. The default value of 0 means to use the same number as cpu cores.')
     parser.add_argument('--split-start-offset', type=int, default=1, help='Offset from the start timestamp to actually start the fragment, supports positive and negative values, default = 1.')
     parser.add_argument('--split-fade-in', type=int, default=2, help='Over how many seconds to fade in the sound after the start timestamp, default = 2.')
     parser.add_argument('--split-end-offset', type=int, default=-1, help='Offset from the end timestamp to actually end the fragment, supports positive and negative values, default = -1.')
     parser.add_argument('--split-fade-out', type=int, default=3, help='Over how many seconds to fade out the sound before the end timestamp, default = 3.')
+
     args = parser.parse_args(args[1:])
     return args
 
@@ -140,6 +144,8 @@ def main(args: list[str]) -> int:
     split_config = split.get_config_from_arguments(args)
     splitted_files = split.split_files(media_file_path, timestamps_list, media_directory, split_config)
     logger.debug('Split into {} files.', len(splitted_files))
+
+    tracks = recognize.recognize_tracks(splitted_files)
     
     return 0
 

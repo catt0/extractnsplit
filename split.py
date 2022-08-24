@@ -10,6 +10,7 @@ from functools import partial
 
 from timestamps import format_timestamp
 
+
 # Wrapper class to hold all the config options
 class SplitConfig:
     def __init__(self, args = None):
@@ -24,6 +25,7 @@ class SplitConfig:
 
     def has_fade(self) -> bool:
         return self.fade_in != 0 or self.fade_out != 0
+
 
 def check_arguments(args) -> bool:
     if r'%n' not in args.split_file_pattern:
@@ -110,6 +112,11 @@ def split_files(media_file_path: str, timestamps: List[int], split_destination_d
             '-af',
             'afade=t=in:st={{}}:d={},afade=t=out:st={{}}:d={}'.format(
                 config.fade_in, config.fade_out),
+        ])
+    else:
+        proto_ffmpeg_args.extend([
+            # without fade we can do a straight copy to save a lot of time
+            '-acodec', 'copy',
         ])
     proto_ffmpeg_args.extend([
         '-ss',
