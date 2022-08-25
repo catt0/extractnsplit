@@ -13,6 +13,7 @@ import split
 import recognize
 import rename
 import tag
+import playlist
 
 from pprint import pprint
 
@@ -29,6 +30,8 @@ def check_args(args) -> bool:
     if not rename.check_arguments(args):
         return False
     if not tag.check_arguments(args):
+        return False
+    if not playlist.check_arguments(args):
         return False
 
     if download.is_remote_file(args.media_file_path) and args.timestamps_file_path == 'stdin' and args.dest is None:
@@ -87,6 +90,9 @@ def parse_args(args: list[str]):
     parser.add_argument('--rename-name-pattern', type=str, default=r'%N - %t', help=r'The file name pattern used when renaming tracks. Following placeholders are supported: %%t - title, %%a - artist, %%n - track number, %N - track number, leading zero(s), %%l - aLbum, %%m - media file name.'
         r'The extension is appended automatically, default = %%N - %%t')
     parser.add_argument('--rename-sanitize-file-names', action=argparse.BooleanOptionalAction, default=True, help='Remove more "special" chars from file names to make them more compatible. Unsafe chars are always removed. default = true.')
+
+    parser.add_argument('--playlist-create-same-folder', action=argparse.BooleanOptionalAction, default=True, help='Create a playlist in the same folder as the media files, default = true.')
+    parser.add_argument('--playlist-create-parent-folder', action=argparse.BooleanOptionalAction, default=False, help='Create a playlist in parent folder of the folder holding the media files, default = false.')
 
     args = parser.parse_args(args[1:])
     return args
@@ -186,6 +192,10 @@ def main(args: list[str]) -> int:
     tracks = rename.rename_tracks(tracks, media_file_path, rename_name_pattern, restricted_file_names)
 
     tag.tag_tracks(tracks, thumbnail_file_path)
+
+    playlist_same_folder = args.playlist_create_same_folder
+    playlist_paremt_folder = args.playlist_create_parent_folder
+    playlist.create_playlist(tracks, playlist_same_folder, playlist_paremt_folder)
     
     return 0
 

@@ -10,7 +10,7 @@ def check_arguments(args) -> bool:
     return True
 
 
-def tag_tracks(tracks: List[Track], thumbnail_path: str or None):
+def tag_tracks(tracks: List[Track], thumbnail_path: str or None) -> None:
     thumbnail_data = None
     if thumbnail_path is not None:
         thumbnail_data = open(thumbnail_path, 'rb').read()
