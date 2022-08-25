@@ -86,6 +86,7 @@ def parse_args(args: list[str]):
 
     parser.add_argument('--rename-name-pattern', type=str, default=r'%N - %t', help=r'The file name pattern used when renaming tracks. Following placeholders are supported: %%t - title, %%a - artist, %%n - track number, %N - track number, leading zero(s), %%l - aLbum, %%m - media file name.'
         r'The extension is appended automatically, default = %%N - %%t')
+    parser.add_argument('--rename-sanitize-file-names', action=argparse.BooleanOptionalAction, default=True, help='Remove more "special" chars from file names to make them more compatible. Unsafe chars are always removed. default = true.')
 
     args = parser.parse_args(args[1:])
     return args
@@ -181,7 +182,8 @@ def main(args: list[str]) -> int:
     tracks = recognize.recognize_tracks(splitted_files, recognize_num_threads)
 
     rename_name_pattern = args.rename_name_pattern
-    tracks = rename.rename_tracks(tracks, media_file_path, rename_name_pattern)
+    restricted_file_names = args.rename_sanitize_file_names
+    tracks = rename.rename_tracks(tracks, media_file_path, rename_name_pattern, restricted_file_names)
 
     tag.tag_tracks(tracks, thumbnail_file_path)
     

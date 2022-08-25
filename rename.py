@@ -7,13 +7,14 @@ from pathlib import Path
 import shutil
 
 from recognize import Track
+from sanitize import sanitize_filename
 
 
 def check_arguments(args) -> bool:
     return True
 
 
-def rename_tracks(tracks: List[Track], media_file: str, rename_name_pattern: str) -> List[Track]:
+def rename_tracks(tracks: List[Track], media_file: str, rename_name_pattern: str, restricted_file_names: bool) -> List[Track]:
     format_str = rename_name_pattern
     format_str = format_str.replace(r'%n', '{track_number}')
     digits_needed = ceil(log10(len(tracks) + 1))
@@ -38,6 +39,7 @@ def rename_tracks(tracks: List[Track], media_file: str, rename_name_pattern: str
 
         target_path = Path(media_file).parent
         file_name = format_str.format(track_number=track_number, title=title, artist=artist, album=album, media_name=media_name, extension=extension)
+        file_name = sanitize_filename(file_name, restricted_file_names)
         target_path = str(target_path.joinpath(file_name))
 
         logger.trace('Renaming {} to {}.', track.file_path, target_path)
