@@ -8,6 +8,7 @@ import shutil
 
 from recognize import Track
 
+
 def check_arguments(args) -> bool:
     return True
 

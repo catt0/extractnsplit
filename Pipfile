@@ -5,6 +5,7 @@ name = "pypi"
 
 [packages]
 loguru = "*"
+music-tag = "*"
 
 [dev-packages]
 pylint = "*"

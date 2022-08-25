@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import shutil
 from loguru import logger
 import argparse
 import sys
@@ -11,6 +12,7 @@ import timestamps
 import split
 import recognize
 import rename
+import tag
 
 from pprint import pprint
 
@@ -26,6 +28,8 @@ def check_args(args) -> bool:
         return False
     if not rename.check_arguments(args):
         return False
+    if not tag.check_arguments(args):
+        return False
 
     if download.is_remote_file(args.media_file_path) and args.timestamps_file_path == 'stdin' and args.dest is None:
         print('With a remote file and reading timestamps from stdin, the --dest argument is required.')
@@ -38,6 +42,13 @@ def check_args(args) -> bool:
     if not download.is_remote_file(args.media_file_path) and args.audio_format is not None:
         print('audio-format can only be specified in combination with a remote file.')
         return False
+
+    if args.thumbnail_file_path is not None:
+        try:
+            open(args.thumbnail_file_path, 'rb')
+        except:
+            print('Thumbnail {} is not readable.'.format(args.thumbnail_file_path))
+            return False
 
     return True
 
@@ -60,6 +71,7 @@ def parse_args(args: list[str]):
 
     parser.add_argument('--use-thumbnail', action=argparse.BooleanOptionalAction, help='Download the thumbnail from the media URL and use it when tagging. By default fetch the thumbnail when downloading a remote media file.')
     parser.add_argument('--audio-format', type=str, help='Audio format to use. All split files will be of the same type. Any audio format supported by yt-dlp can be used. Recommended: "flac" or "mp3". Default is "mp3"')
+    parser.add_argument('--thumbnail-file-path', type=str, help='Path to the thumbnail to use, implies --use-thumbnail.')
 
     parser.add_argument('--split-file-pattern', type=str, default=r'fragment_%n', help='File name pattern used for fragments after splitting. The fragments are generated in the destination folder. '
         r'Following replacements are supported: %%n - fragment number (from 0), %%f - media filename without extension. '
@@ -118,6 +130,10 @@ def main(args: list[str]) -> int:
         media_file_path, thumbnail_file_path = download.download(media_file_path, Path(destination_directory), audio_format, use_thumbnail)
         logger.trace('Download complete. Destination {}, thumbnail at {}.', media_file_path, thumbnail_file_path)
 
+    if args.thumbnail_file_path is not None:
+        use_thumbnail = True
+        thumbnail_file_path = args.thumbnail_file_path
+
     # create a directory named the same as the downloaded file (the video title) and move media and optional thumbnail into this folder
     # we do this after the download, because we only now know the file name
     file_name = Path(media_file_path).name
@@ -132,7 +148,11 @@ def main(args: list[str]) -> int:
             os.remove(media_file_path_destination)
         except FileNotFoundError:
             pass
-        os.rename(media_file_path, media_file_path_destination)
+        # do not remove files that got passed as an argument
+        if download.is_remote_file(args.media_file_path):
+            os.rename(media_file_path, media_file_path_destination)
+        else:
+            shutil.copy(media_file_path, media_file_path_destination)
         media_file_path = media_file_path_destination
     
     if use_thumbnail:
@@ -144,8 +164,14 @@ def main(args: list[str]) -> int:
                 os.remove(thumbnail_file_path_destination)
             except FileNotFoundError:
                 pass
-            os.rename(thumbnail_file_path, thumbnail_file_path_destination)
+            # do not remove files that got passed as an argument
+            if args.thumbnail_file_path is None:
+                os.rename(thumbnail_file_path, thumbnail_file_path_destination)
+            else:
+                shutil.copy(thumbnail_file_path, thumbnail_file_path_destination)
             thumbnail_file_path = thumbnail_file_path_destination
+    else:
+        thumbnail_file_path = None
 
     split_config = split.get_config_from_arguments(args)
     splitted_files = split.split_files(media_file_path, timestamps_list, media_directory, split_config)
@@ -153,8 +179,11 @@ def main(args: list[str]) -> int:
 
     recognize_num_threads = args.recognize_num_threads
     tracks = recognize.recognize_tracks(splitted_files, recognize_num_threads)
+
     rename_name_pattern = args.rename_name_pattern
     tracks = rename.rename_tracks(tracks, media_file_path, rename_name_pattern)
+
+    tag.tag_tracks(tracks, thumbnail_file_path)
     
     return 0
 
