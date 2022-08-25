@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
+from audioop import mul
 from loguru import logger
-from typing import List
+from typing import List, Tuple
 
 import subprocess
 import json
 import tempfile
+import multiprocessing
+from functools import partial
 
 import split
 
@@ -20,6 +23,9 @@ class Track:
         self.position = None
         # path on disc
         self.file_path = None
+
+        # internal statistics
+        self.had_recheck = False
 
     def __str__(self) -> str:
         return 'Track {} at {}: title {}, artist {}, album {}, year {}'.format(
@@ -44,8 +50,10 @@ def recognize_track(track_path: str, position: int) -> Track:
     ]
     logger.trace('Calling songrec with arguments: {}.', songrec_args)
 
+    jsons = None
     proc = subprocess.run(songrec_args, capture_output=True, text=True)
     if proc.returncode != 0:
+        logger.error('Identifying track {} failed with code {}, stderr: {}, stdout: {}.', track_path, proc.returncode, proc.stderr, proc.stdout)
         raise ValueError('Identifying track {} failed with code {}, stderr: {}, stdout: {}.'.format(
             track_path, proc.returncode, proc.stderr, proc.stdout))
 
@@ -59,6 +67,7 @@ def recognize_track(track_path: str, position: int) -> Track:
         logger.warning('Unable to recognize {}.', track_path)
         logger.debug('Response from songrec for {}: {}.', track_path, song_info)
         return track
+
     track.title = song_info['track']['title']
     track.artist = song_info['track']['subtitle']
 
@@ -72,6 +81,10 @@ def recognize_track(track_path: str, position: int) -> Track:
 
     logger.trace('Recognized as {}.', track)
     return track
+
+
+def recognize_track_wrapper(arg_tuple: Tuple[int, str]) -> Track:
+    return recognize_track(arg_tuple[1], arg_tuple[0])
 
 
 # extracts a part from the track fruther from the start
@@ -108,27 +121,34 @@ def recheck_track(track : Track) -> Track:
         logger.debug('Split part from {} to {}.', track.file_path, part_path)
         new_track = recognize_track(part_path, track.position)
         logger.debug('Re-recognized track: {}.', new_track)
+        new_track.had_recheck = True
+        new_track.file_path = track.file_path
 
         return new_track
 
 
-def recognize_tracks(track_paths: List[str]) -> List[Track]:
+def recognize_tracks(track_paths: List[str], num_threads: int) -> List[Track]:
     tracks = []
     recognized = 0
     rechecked = 0
     recognized_after_recheck = 0
-    for i, track_path in enumerate(track_paths):
-        track = recognize_track(track_path, i)
+    pool = multiprocessing.Pool(num_threads)
+    logger.trace('Starting recognize with {} threds.', num_threads)
+    tracks = pool.map(recognize_track_wrapper, enumerate(track_paths))
 
+    for i, track in enumerate(tracks):
+        # for some reason we can not try recognize again inside the thread pool above
+        # slow workaround here (FIXME)
         if track.title is None:
-            rechecked += 1
-            track = recheck_track(track)
-            if track.title is not None:
-                recognized_after_recheck += 1
-
-        tracks.append(track)
+            # modify the element in the list
+            tracks[i] = recheck_track(track)
+            track = tracks[i]
         if track.title is not None:
             recognized += 1
+            if track.had_recheck:
+                recognized_after_recheck += 1
+        if track.had_recheck:
+            rechecked += 1
 
     logger.debug('Recognized {} of {} tracks. Rechecked {} tracks, success on {} of them.',
         recognized, len(tracks), rechecked, recognized_after_recheck)

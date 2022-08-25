@@ -10,6 +10,7 @@ import download
 import timestamps
 import split
 import recognize
+import rename
 
 from pprint import pprint
 
@@ -22,6 +23,8 @@ def check_args(args) -> bool:
     if not split.check_arguments(args):
         return False
     if not recognize.check_arguments(args):
+        return False
+    if not rename.check_arguments(args):
         return False
 
     if download.is_remote_file(args.media_file_path) and args.timestamps_file_path == 'stdin' and args.dest is None:
@@ -55,11 +58,9 @@ def parse_args(args: list[str]):
         'By default the directory is either the directory of the media file (if local) or the directory of the timestamp file. '
         'If the media file is remote and timestamps are passed via stdin, this option is required.')
 
-    parser.add_argument_group('Media download and concversion options, only valid for remote media')
     parser.add_argument('--use-thumbnail', action=argparse.BooleanOptionalAction, help='Download the thumbnail from the media URL and use it when tagging. By default fetch the thumbnail when downloading a remote media file.')
     parser.add_argument('--audio-format', type=str, help='Audio format to use. All split files will be of the same type. Any audio format supported by yt-dlp can be used. Recommended: "flac" or "mp3". Default is "mp3"')
 
-    parser.add_argument_group('File splitting options')
     parser.add_argument('--split-file-pattern', type=str, default=r'fragment_%n', help='File name pattern used for fragments after splitting. The fragments are generated in the destination folder. '
         r'Following replacements are supported: %%n - fragment number (from 0), %%f - media filename without extension. '
         r'The pattern must include at least one %%n. The default is "fragment_%%n". The extension is appended automatically.')
@@ -68,6 +69,11 @@ def parse_args(args: list[str]):
     parser.add_argument('--split-fade-in', type=int, default=2, help='Over how many seconds to fade in the sound after the start timestamp, default = 2.')
     parser.add_argument('--split-end-offset', type=int, default=-1, help='Offset from the end timestamp to actually end the fragment, supports positive and negative values, default = -1.')
     parser.add_argument('--split-fade-out', type=int, default=3, help='Over how many seconds to fade out the sound before the end timestamp, default = 3.')
+
+    parser.add_argument('--recognize-num-threads', type=int, default=8, help='Number of parallel songrec calls, default = 8.')
+
+    parser.add_argument('--rename-name-pattern', type=str, default=r'%N - %t', help=r'The file name pattern used when renaming tracks. Following placeholders are supported: %%t - title, %%a - artist, %%n - track number, %N - track number, leading zero(s), %%l - aLbum, %%m - media file name.'
+        r'The extension is appended automatically, default = %%N - %%t')
 
     args = parser.parse_args(args[1:])
     return args
@@ -145,7 +151,10 @@ def main(args: list[str]) -> int:
     splitted_files = split.split_files(media_file_path, timestamps_list, media_directory, split_config)
     logger.debug('Split into {} files.', len(splitted_files))
 
-    tracks = recognize.recognize_tracks(splitted_files)
+    recognize_num_threads = args.recognize_num_threads
+    tracks = recognize.recognize_tracks(splitted_files, recognize_num_threads)
+    rename_name_pattern = args.rename_name_pattern
+    tracks = rename.rename_tracks(tracks, media_file_path, rename_name_pattern)
     
     return 0
 
